@@ -33,10 +33,9 @@ func (h *APIKeyHandler) GenerateAPIKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"api_key":       apiKey,
-		"email":         apiKeyRecord.Email,
+		"api_key":        apiKey,
+		"email":          apiKeyRecord.Email,
 		"created_at_utc": apiKeyRecord.CreatedAt.UTC(),
-		"message":       "API key generated successfully. Store this key securely - it will not be shown again.",
+		"uuid":           apiKeyRecord.ID,
 	})
 }
-
