@@ -49,9 +49,9 @@ func (s *AvailabilityService) UpdateAvailability(ctx context.Context, userID, ru
 	if err != nil {
 		return nil, err
 	}
-	// If day_of_week is zero, preserve the original value
-	if rule.DayOfWeek == 0 {
-		rule.DayOfWeek = existing.DayOfWeek
+	// If days_of_week is empty, preserve the original value
+	if len(rule.DaysOfWeek) == 0 {
+		rule.DaysOfWeek = existing.DaysOfWeek
 	}
 	if err := validateAvailabilityRule(rule); err != nil {
 		return nil, err
@@ -88,11 +88,33 @@ func (s *AvailabilityService) GenerateAvailableSlots(ctx context.Context, userID
 	var candidate []Slot
 	startDate := fromUTC.Truncate(24 * time.Hour)
 	endDate := toUTC.Truncate(24 * time.Hour)
+	
 	for day := startDate; !day.After(endDate); day = day.Add(24 * time.Hour) {
+		dayOfWeek := int(day.Weekday())
+		
 		for _, r := range rules {
-			if int(day.Weekday()) != r.DayOfWeek {
+			// Check if this day matches any of the days in the rule
+			dayMatches := false
+			for _, ruleDay := range r.DaysOfWeek {
+				if dayOfWeek == ruleDay {
+					dayMatches = true
+					break
+				}
+			}
+			if !dayMatches {
 				continue
 			}
+			
+			// Handle recurring logic
+			if !r.IsRecurring {
+				// For non-recurring rules, only generate slots for the week containing created_at
+				ruleWeekStart := getWeekStart(r.CreatedAt)
+				currentWeekStart := getWeekStart(day)
+				if !ruleWeekStart.Equal(currentWeekStart) {
+					continue // Skip if not in the same week as when rule was created
+				}
+			}
+			
 			startTOD, err := parseHHMM(r.StartTime)
 			if err != nil {
 				return nil, err
@@ -138,18 +160,50 @@ func (s *AvailabilityService) GenerateAvailableSlots(ctx context.Context, userID
 	return available, nil
 }
 
+// getWeekStart returns the start of the week (Monday) for a given date
+func getWeekStart(t time.Time) time.Time {
+	// Go's time.Weekday: Sunday=0, Monday=1, ..., Saturday=6
+	// We want Monday to be the start of the week
+	weekday := int(t.Weekday())
+	// Convert: Sunday=0 -> offset=6, Monday=1 -> offset=0, etc.
+	offset := (weekday + 6) % 7
+	return t.Truncate(24 * time.Hour).AddDate(0, 0, -offset)
+}
+
 func validateAvailabilityRule(rule *models.AvailabilityRule) error {
+	// Validate days_of_week: must have between 1 and 7 days
+	if len(rule.DaysOfWeek) < 1 {
+		return errors.New("days_of_week must contain at least 1 day")
+	}
+	if len(rule.DaysOfWeek) > 7 {
+		return errors.New("days_of_week must contain at most 7 days")
+	}
+	
+	// Validate each day is between 0-6 (Sunday=0 to Saturday=6)
+	seenDays := make(map[int]bool)
+	for _, day := range rule.DaysOfWeek {
+		if day < 0 || day > 6 {
+			return fmt.Errorf("invalid day_of_week: %d (must be between 0-6)", day)
+		}
+		if seenDays[day] {
+			return fmt.Errorf("duplicate day_of_week: %d", day)
+		}
+		seenDays[day] = true
+	}
+	
+	// Validate time format and range
 	startTime, err := time.Parse("15:04", rule.StartTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid start_time format: %w", err)
 	}
 	endTime, err := time.Parse("15:04", rule.EndTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid end_time format: %w", err)
 	}
 	if !endTime.After(startTime) {
 		return errors.New("end_time must be after start_time")
 	}
+	
 	return nil
 }
 

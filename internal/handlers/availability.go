@@ -35,12 +35,14 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 	type CreatedAvailability struct {
 		ID             string    `json:"id"`
 		UserID         string    `json:"user_id"`
-		DayOfWeek      int       `json:"day_of_week"`
+		Type           string    `json:"type,omitempty"`
+		DaysOfWeek     []int     `json:"days_of_week"`
 		StartTime      string    `json:"start_time"`
 		EndTime        string    `json:"end_time"`
 		SlotLengthMins int       `json:"slot_length_minutes"`
 		Title          string    `json:"title,omitempty"`
 		Available      bool      `json:"available"`
+		IsRecurring    bool      `json:"is_recurring"`
 		CreatedAtUTC   time.Time `json:"created_at_utc"`
 	}
 	var filtered []CreatedAvailability
@@ -48,12 +50,14 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 		filtered = append(filtered, CreatedAvailability{
 			ID:             rule.ID,
 			UserID:         rule.UserID,
-			DayOfWeek:      rule.DayOfWeek,
+			Type:           rule.Type,
+			DaysOfWeek:     rule.DaysOfWeek,
 			StartTime:      rule.StartTime,
 			EndTime:        rule.EndTime,
 			SlotLengthMins: rule.SlotLengthMins,
 			Title:          rule.Title,
 			Available:      rule.Available,
+			IsRecurring:    rule.IsRecurring,
 			CreatedAtUTC:   rule.CreatedAt,
 		})
 	}
@@ -83,23 +87,27 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 	type UpdatedAvailability struct {
 		ID             string    `json:"id"`
 		UserID         string    `json:"user_id"`
-		DayOfWeek      int       `json:"day_of_week"`
+		Type           string    `json:"type,omitempty"`
+		DaysOfWeek     []int     `json:"days_of_week"`
 		StartTime      string    `json:"start_time"`
 		EndTime        string    `json:"end_time"`
 		SlotLengthMins int       `json:"slot_length_minutes"`
 		Title          string    `json:"title,omitempty"`
 		Available      bool      `json:"available"`
+		IsRecurring    bool      `json:"is_recurring"`
 		UpdatedAtUTC   time.Time `json:"updated_at_utc"`
 	}
 	filtered := UpdatedAvailability{
 		ID:             res.ID,
 		UserID:         res.UserID,
-		DayOfWeek:      res.DayOfWeek,
+		Type:           res.Type,
+		DaysOfWeek:     res.DaysOfWeek,
 		StartTime:      res.StartTime,
 		EndTime:        res.EndTime,
 		SlotLengthMins: res.SlotLengthMins,
 		Title:          res.Title,
 		Available:      res.Available,
+		IsRecurring:    res.IsRecurring,
 		UpdatedAtUTC:   res.UpdatedAt,
 	}
 	c.JSON(http.StatusOK, filtered)
@@ -142,6 +150,13 @@ func (h *AvailabilityHandlers) GetSlots(c *gin.Context) {
 	slots, err := h.AvailSv.GenerateAvailableSlots(c.Request.Context(), userID, from.UTC(), to.UTC())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(slots) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No available slots found for the specified date range",
+			"slots":    []service.Slot{},
+		})
 		return
 	}
 	c.JSON(http.StatusOK, slots)

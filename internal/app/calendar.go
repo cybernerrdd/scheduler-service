@@ -311,12 +311,13 @@ func (a *App) GetGoogleCalendarEvents(c *gin.Context) {
 					continue
 				}
 				rule := models.AvailabilityRule{
-					DayOfWeek:      int(startUTC.Weekday()),
+					DaysOfWeek:     []int{int(startUTC.Weekday())},
 					StartTime:      startUTC.Format("15:04"),
 					EndTime:        endUTC.Format("15:04"),
 					SlotLengthMins: durMins,
 					Title:          event.Summary,
 					Available:      true,
+					IsRecurring:     false, // Google Calendar events are typically one-time
 				}
 				fmt.Printf("Creating availability rule: %+v\n", rule)
 				availResult, availErr := availSvc.SetAvailability(c.Request.Context(), userID, []models.AvailabilityRule{rule})

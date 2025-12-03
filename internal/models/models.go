@@ -8,12 +8,14 @@ import (
 type AvailabilityRule struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"user_id"`
-	DayOfWeek      int       `json:"day_of_week"`
+	Type           string    `json:"type,omitempty"`
+	DaysOfWeek     []int     `json:"days_of_week"` // Array of days (0=Sunday, 6=Saturday), 1-7 days required
 	StartTime      string    `json:"start_time"`
 	EndTime        string    `json:"end_time"`
 	SlotLengthMins int       `json:"slot_length_minutes"`
 	Title          string    `json:"title,omitempty"`
 	Available      bool      `json:"available"`
+	IsRecurring    bool      `json:"is_recurring"` // true = all future weeks, false = current week only
 	CreatedAt      time.Time `json:"created_at_utc,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at_utc,omitempty"`
 }
