@@ -227,6 +227,9 @@ func parseHHMM(s string) (time.Time, error) {
 	if len(s) < 5 {
 		return time.Time{}, fmt.Errorf("invalid time string: %s", s)
 	}
-	s = s[:5]
+	// Normalize to HH:MM format (handle database format like "09:00:00.000000")
+	if len(s) > 5 {
+		s = s[:5]
+	}
 	return time.Parse("15:04", s)
 }

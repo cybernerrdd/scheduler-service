@@ -10,6 +10,19 @@ import (
 	"scheduler-service/internal/repository"
 )
 
+// normalizeTime converts database time format (HH:MM:SS.microseconds) to HH:MM format
+func normalizeTime(timeStr string) string {
+	// Handle empty string
+	if timeStr == "" {
+		return ""
+	}
+	// Take only first 5 characters (HH:MM)
+	if len(timeStr) >= 5 {
+		return timeStr[:5]
+	}
+	return timeStr
+}
+
 type AvailabilityRepo struct{}
 
 func NewAvailabilityRepo() *AvailabilityRepo { return &AvailabilityRepo{} }
@@ -41,8 +54,8 @@ func (r *AvailabilityRepo) GetAvailabilityRule(ctx context.Context, q repository
 	if ruleType != nil {
 		rule.Type = *ruleType
 	}
-	rule.StartTime = start
-	rule.EndTime = end
+	rule.StartTime = normalizeTime(start)
+	rule.EndTime = normalizeTime(end)
 	return &rule, nil
 }
 
@@ -66,8 +79,8 @@ func (r *AvailabilityRepo) ListAvailabilityRules(ctx context.Context, q reposito
 		if ruleType != nil {
 			rule.Type = *ruleType
 		}
-		rule.StartTime = start
-		rule.EndTime = end
+		rule.StartTime = normalizeTime(start)
+		rule.EndTime = normalizeTime(end)
 		out = append(out, rule)
 	}
 	return out, nil
