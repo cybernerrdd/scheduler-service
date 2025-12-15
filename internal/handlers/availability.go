@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -77,7 +76,7 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 		return
 	}
 
-	// Use rule_id from path parameter
+	// Use rule_id from path, ignore any id in body
 	res, err := h.AvailSv.UpdateAvailability(c.Request.Context(), userID, ruleID, &payload)
 	if err == pgx.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "availability rule not found"})
@@ -177,7 +176,7 @@ func (h *AvailabilityHandlers) GetSlots(c *gin.Context) {
 	if len(slots) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No available slots found for the specified date range",
-			"slots":    []service.Slot{},
+			"slots":   []service.Slot{},
 		})
 		return
 	}
