@@ -21,6 +21,7 @@ type AvailabilityRepository interface {
 	ListAvailabilityRules(ctx context.Context, q Querier, userID string) ([]models.AvailabilityRule, error)
 	UpdateAvailabilityRule(ctx context.Context, q Querier, userID, ruleID string, r *models.AvailabilityRule) (string, error)
 	GetAvailabilityRule(ctx context.Context, q Querier, userID, ruleID string) (*models.AvailabilityRule, error)
+	DeleteAvailabilityRule(ctx context.Context, q Querier, userID, ruleID string) error
 }
 
 type BookingRepository interface {

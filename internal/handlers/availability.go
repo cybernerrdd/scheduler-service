@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -64,25 +65,34 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 	c.JSON(http.StatusCreated, filtered)
 }
 
-// PUT /users/:id/availability/:rule_id
+// PUT /users/:id/availability
+// Accepts array of availability rules (same format as POST)
 func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 	userID := c.Param("id")
-	ruleID := c.Param("rule_id")
-
-	var payload models.AvailabilityRule
+	var payload []models.AvailabilityRule
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	res, err := h.AvailSv.UpdateAvailability(c.Request.Context(), userID, ruleID, &payload)
-	if err == pgx.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"error": "availability not found"})
-		return
+
+	var updated []models.AvailabilityRule
+	for _, rule := range payload {
+		if rule.ID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "id is required for each rule in update"})
+			return
+		}
+		res, err := h.AvailSv.UpdateAvailability(c.Request.Context(), userID, rule.ID, &rule)
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("availability rule %s not found", rule.ID)})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		updated = append(updated, *res)
 	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+
 	// Only include updated_at_utc in response
 	type UpdatedAvailability struct {
 		ID             string    `json:"id"`
@@ -97,20 +107,40 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 		IsRecurring    bool      `json:"is_recurring"`
 		UpdatedAtUTC   time.Time `json:"updated_at_utc"`
 	}
-	filtered := UpdatedAvailability{
-		ID:             res.ID,
-		UserID:         res.UserID,
-		Type:           res.Type,
-		DaysOfWeek:     res.DaysOfWeek,
-		StartTime:      res.StartTime,
-		EndTime:        res.EndTime,
-		SlotLengthMins: res.SlotLengthMins,
-		Title:          res.Title,
-		Available:      res.Available,
-		IsRecurring:    res.IsRecurring,
-		UpdatedAtUTC:   res.UpdatedAt,
+	var filtered []UpdatedAvailability
+	for _, rule := range updated {
+		filtered = append(filtered, UpdatedAvailability{
+			ID:             rule.ID,
+			UserID:         rule.UserID,
+			Type:           rule.Type,
+			DaysOfWeek:     rule.DaysOfWeek,
+			StartTime:      rule.StartTime,
+			EndTime:        rule.EndTime,
+			SlotLengthMins: rule.SlotLengthMins,
+			Title:          rule.Title,
+			Available:      rule.Available,
+			IsRecurring:    rule.IsRecurring,
+			UpdatedAtUTC:   rule.UpdatedAt,
+		})
 	}
 	c.JSON(http.StatusOK, filtered)
+}
+
+// DELETE /users/:id/availability/:rule_id
+func (h *AvailabilityHandlers) DeleteAvailability(c *gin.Context) {
+	userID := c.Param("id")
+	ruleID := c.Param("rule_id")
+
+	err := h.AvailSv.DeleteAvailability(c.Request.Context(), userID, ruleID)
+	if err == pgx.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "availability rule not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "availability rule deleted successfully"})
 }
 
 // GET /users/:id/availability

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"scheduler-service/internal/models"
 	"scheduler-service/internal/repository"
 )
@@ -84,4 +86,16 @@ func (r *AvailabilityRepo) UpdateAvailabilityRule(ctx context.Context, q reposit
 		ar.Title, ar.Available, ar.IsRecurring, now, ruleID, userID,
 	).Scan(&updatedID)
 	return updatedID, err
+}
+
+func (r *AvailabilityRepo) DeleteAvailabilityRule(ctx context.Context, q repository.Querier, userID, ruleID string) error {
+	query := `DELETE FROM availability_rules WHERE id=$1 AND user_id=$2`
+	result, err := q.Exec(ctx, query, ruleID, userID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }

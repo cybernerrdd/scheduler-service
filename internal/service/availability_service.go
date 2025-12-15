@@ -53,6 +53,18 @@ func (s *AvailabilityService) UpdateAvailability(ctx context.Context, userID, ru
 	if len(rule.DaysOfWeek) == 0 {
 		rule.DaysOfWeek = existing.DaysOfWeek
 	}
+	// If start_time is empty, preserve the original value
+	if rule.StartTime == "" {
+		rule.StartTime = existing.StartTime
+	}
+	// If end_time is empty, preserve the original value
+	if rule.EndTime == "" {
+		rule.EndTime = existing.EndTime
+	}
+	// If slot_length_minutes is zero, preserve the original value
+	if rule.SlotLengthMins == 0 {
+		rule.SlotLengthMins = existing.SlotLengthMins
+	}
 	if err := validateAvailabilityRule(rule); err != nil {
 		return nil, err
 	}
@@ -66,6 +78,10 @@ func (s *AvailabilityService) UpdateAvailability(ctx context.Context, userID, ru
 		return nil, err
 	}
 	return updatedRule, nil
+}
+
+func (s *AvailabilityService) DeleteAvailability(ctx context.Context, userID, ruleID string) error {
+	return s.Avail.DeleteAvailabilityRule(ctx, s.DB, userID, ruleID)
 }
 
 func (s *AvailabilityService) ListAvailability(ctx context.Context, userID string) ([]models.AvailabilityRule, error) {
