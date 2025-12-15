@@ -47,7 +47,7 @@ func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
 		users := api.Group("/users")
 		{
 			users.POST("/:id/availability", availHandlers.SetAvailability)
-			users.PUT("/:id/availability", availHandlers.UpdateAvailability)
+			users.PUT("/:id/availability/:rule_id", availHandlers.UpdateAvailability)
 			users.DELETE("/:id/availability/:rule_id", availHandlers.DeleteAvailability)
 			users.GET("/:id/availability", availHandlers.ListAvailability)
 			users.GET("/:id/slots", availHandlers.GetSlots)

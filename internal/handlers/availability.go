@@ -65,32 +65,27 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 	c.JSON(http.StatusCreated, filtered)
 }
 
-// PUT /users/:id/availability
-// Accepts array of availability rules (same format as POST)
+// PUT /users/:id/availability/:rule_id
+// Accepts single availability rule object (id comes from path parameter)
 func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 	userID := c.Param("id")
-	var payload []models.AvailabilityRule
+	ruleID := c.Param("rule_id")
+
+	var payload models.AvailabilityRule
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	var updated []models.AvailabilityRule
-	for _, rule := range payload {
-		if rule.ID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "id is required for each rule in update"})
-			return
-		}
-		res, err := h.AvailSv.UpdateAvailability(c.Request.Context(), userID, rule.ID, &rule)
-		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("availability rule %s not found", rule.ID)})
-			return
-		}
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		updated = append(updated, *res)
+	// Use rule_id from path parameter
+	res, err := h.AvailSv.UpdateAvailability(c.Request.Context(), userID, ruleID, &payload)
+	if err == pgx.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "availability rule not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	// Only include updated_at_utc in response
@@ -107,21 +102,18 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 		IsRecurring    bool      `json:"is_recurring"`
 		UpdatedAtUTC   time.Time `json:"updated_at_utc"`
 	}
-	var filtered []UpdatedAvailability
-	for _, rule := range updated {
-		filtered = append(filtered, UpdatedAvailability{
-			ID:             rule.ID,
-			UserID:         rule.UserID,
-			Type:           rule.Type,
-			DaysOfWeek:     rule.DaysOfWeek,
-			StartTime:      rule.StartTime,
-			EndTime:        rule.EndTime,
-			SlotLengthMins: rule.SlotLengthMins,
-			Title:          rule.Title,
-			Available:      rule.Available,
-			IsRecurring:    rule.IsRecurring,
-			UpdatedAtUTC:   rule.UpdatedAt,
-		})
+	filtered := UpdatedAvailability{
+		ID:             res.ID,
+		UserID:         res.UserID,
+		Type:           res.Type,
+		DaysOfWeek:     res.DaysOfWeek,
+		StartTime:      res.StartTime,
+		EndTime:        res.EndTime,
+		SlotLengthMins: res.SlotLengthMins,
+		Title:          res.Title,
+		Available:      res.Available,
+		IsRecurring:    res.IsRecurring,
+		UpdatedAtUTC:   res.UpdatedAt,
 	}
 	c.JSON(http.StatusOK, filtered)
 }
