@@ -98,15 +98,30 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 
 	code := c.Query("code")
 	state := c.Query("state")
-	userID := c.Query("user_id") // Extract user_id from query params
 
 	if code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "authorization code required"})
 		return
 	}
 
+	if state == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "state parameter required"})
+		return
+	}
+
+	// Extract user_id from state parameter (format: "user_<user_id>_<timestamp>")
+	// Try to get from query param first (for backward compatibility), otherwise parse from state
+	userID := c.Query("user_id")
 	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id required"})
+		// Parse user_id from state: "user_<uuid>_<timestamp>"
+		parts := strings.Split(state, "_")
+		if len(parts) >= 2 && parts[0] == "user" {
+			userID = parts[1]
+		}
+	}
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id could not be extracted from state parameter"})
 		return
 	}
 
