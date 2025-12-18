@@ -9,6 +9,7 @@ type AvailabilityRule struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"user_id"`
 	Type           string    `json:"type,omitempty"`
+	Event          string    `json:"event,omitempty"` // Event identifier to group availability rules
 	DaysOfWeek     []int     `json:"days_of_week"` // Array of days (0=Sunday, 6=Saturday), 1-7 days required
 	StartTime      string    `json:"start_time"`
 	EndTime        string    `json:"end_time"`

@@ -76,6 +76,7 @@ func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
 			users.PUT("/:id/availability/:rule_id", availHandlers.UpdateAvailability)
 			users.DELETE("/:id/availability/:rule_id", availHandlers.DeleteAvailability)
 			users.GET("/:id/availability", availHandlers.ListAvailability)
+			users.GET("/:id/slots/event/:event", availHandlers.GetSlotsByEvent) // Must be before /:id/slots to avoid path conflict
 			users.GET("/:id/slots", availHandlers.GetSlots)
 			users.POST("/:id/bookings", availHandlers.CreateBooking)
 			users.GET("/:id/bookings", availHandlers.ListBookings)

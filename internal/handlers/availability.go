@@ -36,6 +36,7 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 		ID             string    `json:"id"`
 		UserID         string    `json:"user_id"`
 		Type           string    `json:"type,omitempty"`
+		Event          string    `json:"event,omitempty"`
 		DaysOfWeek     []int     `json:"days_of_week"`
 		StartTime      string    `json:"start_time"`
 		EndTime        string    `json:"end_time"`
@@ -51,6 +52,7 @@ func (h *AvailabilityHandlers) SetAvailability(c *gin.Context) {
 			ID:             rule.ID,
 			UserID:         rule.UserID,
 			Type:           rule.Type,
+			Event:          rule.Event,
 			DaysOfWeek:     rule.DaysOfWeek,
 			StartTime:      rule.StartTime,
 			EndTime:        rule.EndTime,
@@ -92,6 +94,7 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 		ID             string    `json:"id"`
 		UserID         string    `json:"user_id"`
 		Type           string    `json:"type,omitempty"`
+		Event          string    `json:"event,omitempty"`
 		DaysOfWeek     []int     `json:"days_of_week"`
 		StartTime      string    `json:"start_time"`
 		EndTime        string    `json:"end_time"`
@@ -105,6 +108,7 @@ func (h *AvailabilityHandlers) UpdateAvailability(c *gin.Context) {
 		ID:             res.ID,
 		UserID:         res.UserID,
 		Type:           res.Type,
+		Event:          res.Event,
 		DaysOfWeek:     res.DaysOfWeek,
 		StartTime:      res.StartTime,
 		EndTime:        res.EndTime,
@@ -176,6 +180,52 @@ func (h *AvailabilityHandlers) GetSlots(c *gin.Context) {
 	if len(slots) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No available slots found for the specified date range",
+			"slots":   []service.Slot{},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, slots)
+}
+
+// GET /users/:id/slots/event/:event?from=ISO&to=ISO
+func (h *AvailabilityHandlers) GetSlotsByEvent(c *gin.Context) {
+	userID := c.Param("id")
+	event := c.Param("event")
+	fromStr := c.Query("from")
+	toStr := c.Query("to")
+	
+	if event == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "event parameter required"})
+		return
+	}
+	
+	if fromStr == "" || toStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "from and to required (ISO8601)"})
+		return
+	}
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid from"})
+		return
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid to"})
+		return
+	}
+	if !from.Before(to) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "from must be before to"})
+		return
+	}
+	slots, err := h.AvailSv.GenerateAvailableSlotsByEvent(c.Request.Context(), userID, event, from.UTC(), to.UTC())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(slots) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No available slots found for the specified event and date range",
+			"event":   event,
 			"slots":   []service.Slot{},
 		})
 		return
