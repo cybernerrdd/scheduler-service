@@ -98,9 +98,15 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 
 	code := c.Query("code")
 	state := c.Query("state")
+	userID := c.Query("user_id") // Extract user_id from query params
 
 	if code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "authorization code required"})
+		return
+	}
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id required"})
 		return
 	}
 
@@ -111,28 +117,50 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Store token (in a real app, you'd store this in database associated with user)
-	tokenJSON, _ := json.Marshal(token)
+	// Save token to database using token service
+	if a.GoogleTokenSvc != nil {
+		err = a.GoogleTokenSvc.SaveToken(c.Request.Context(), userID, token)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save token: %v", err)})
+			return
+		}
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token service not initialized"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Authorization successful",
 		"state":   state,
-		"token":   string(tokenJSON), // In production, don't return token directly
+		"user_id": userID,
 	})
 }
 
 // GetGoogleCalendarEvents fetches events from Google Calendar
 func (a *App) GetGoogleCalendarEvents(c *gin.Context) {
-	// Get token from request (in production, get from database)
-	tokenStr := c.GetHeader("X-Google-Token")
-	if tokenStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Google token required in X-Google-Token header"})
+	// Get user_id from query parameter
+	userID := c.Query("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter required"})
 		return
 	}
 
-	var token oauth2.Token
-	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token format"})
+	// Get valid token from database (automatically refreshes if expired)
+	if a.GoogleTokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token service not initialized"})
+		return
+	}
+
+	token, err := a.GoogleTokenSvc.GetValidToken(c.Request.Context(), userID)
+	if err != nil {
+		if err.Error() == "no Google tokens found for user - re-login required" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "no Google tokens found for user - re-login required",
+				"user_id": userID,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get token: %v", err)})
 		return
 	}
 
@@ -143,7 +171,7 @@ func (a *App) GetGoogleCalendarEvents(c *gin.Context) {
 	}
 
 	// Create HTTP client with token
-	client := calendarConfig.Config.Client(context.Background(), &token)
+	client := calendarConfig.Config.Client(context.Background(), token)
 
 	// Create Calendar service
 	srv, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
@@ -156,7 +184,7 @@ func (a *App) GetGoogleCalendarEvents(c *gin.Context) {
 	calendarID := c.DefaultQuery("calendar_id", "primary")
 	timeMin := c.Query("time_min") // RFC3339 format
 	timeMax := c.Query("time_max") // RFC3339 format
-	userID := c.Query("user_id")   // target user to create availability/booking for
+	// userID already extracted above - used for creating availability/booking
 	maxResults := int64(250)
 
 	// Build the events call
@@ -376,16 +404,29 @@ func isGoogleMeetEvent(e *CalendarEvent) bool {
 
 // GetGoogleCalendarList fetches available calendars
 func (a *App) GetGoogleCalendarList(c *gin.Context) {
-	// Get token from request
-	tokenStr := c.GetHeader("X-Google-Token")
-	if tokenStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Google token required in X-Google-Token header"})
+	// Get user_id from query parameter
+	userID := c.Query("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter required"})
 		return
 	}
 
-	var token oauth2.Token
-	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token format"})
+	// Get valid token from database (automatically refreshes if expired)
+	if a.GoogleTokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token service not initialized"})
+		return
+	}
+
+	token, err := a.GoogleTokenSvc.GetValidToken(c.Request.Context(), userID)
+	if err != nil {
+		if err.Error() == "no Google tokens found for user - re-login required" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "no Google tokens found for user - re-login required",
+				"user_id": userID,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get token: %v", err)})
 		return
 	}
 
@@ -396,7 +437,7 @@ func (a *App) GetGoogleCalendarList(c *gin.Context) {
 	}
 
 	// Create HTTP client with token
-	client := calendarConfig.Config.Client(context.Background(), &token)
+	client := calendarConfig.Config.Client(context.Background(), token)
 
 	// Create Calendar service
 	srv, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
@@ -440,23 +481,39 @@ func (a *App) GetGoogleCalendarList(c *gin.Context) {
 
 // CreateInterviewEvent creates a Google Meet event in Google Calendar
 func (a *App) CreateInterviewEvent(c *gin.Context) {
-	// Get token from request
-	tokenStr := c.GetHeader("X-Google-Token")
-	if tokenStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Google token required in X-Google-Token header"})
-		return
-	}
-
-	var token oauth2.Token
-	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token format"})
-		return
-	}
+	// Get user_id from query parameter (preferred) or request body
+	userID := c.Query("user_id")
 
 	// Parse interview event from request body
 	var interviewEvent InterviewEvent
 	if err := c.ShouldBindJSON(&interviewEvent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// If user_id not in query, try to get from body (though it's not in InterviewEvent struct)
+	// For now, require it in query parameter
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter required"})
+		return
+	}
+
+	// Get valid token from database (automatically refreshes if expired)
+	if a.GoogleTokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token service not initialized"})
+		return
+	}
+
+	token, err := a.GoogleTokenSvc.GetValidToken(c.Request.Context(), userID)
+	if err != nil {
+		if err.Error() == "no Google tokens found for user - re-login required" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "no Google tokens found for user - re-login required",
+				"user_id": userID,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get token: %v", err)})
 		return
 	}
 
@@ -483,7 +540,7 @@ func (a *App) CreateInterviewEvent(c *gin.Context) {
 	}
 
 	// Create HTTP client with token
-	client := calendarConfig.Config.Client(context.Background(), &token)
+	client := calendarConfig.Config.Client(context.Background(), token)
 
 	// Create Calendar service
 	srv, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
@@ -590,41 +647,44 @@ Status: %s`,
 	c.JSON(http.StatusCreated, response)
 }
 
-// RefreshGoogleToken refreshes an expired Google OAuth token
+// RefreshGoogleToken manually refreshes an expired Google OAuth token
+// Note: Token refresh now happens automatically, but this endpoint can be used for manual refresh
 func (a *App) RefreshGoogleToken(c *gin.Context) {
-	// Get refresh token from request body
-	var requestBody struct {
-		RefreshToken string `json:"refresh_token" binding:"required"`
+	// Get user_id from query parameter or request body
+	userID := c.Query("user_id")
+	if userID == "" {
+		var body struct {
+			UserID string `json:"user_id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.UserID != "" {
+			userID = body.UserID
+		}
 	}
-
-	if err := c.ShouldBindJSON(&requestBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token required"})
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter or body field required"})
 		return
 	}
 
-	calendarConfig := InitGoogleCalendarConfig()
-	if calendarConfig == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Google Calendar not configured"})
+	// Get token from database (this will automatically refresh if expired)
+	if a.GoogleTokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token service not initialized"})
 		return
 	}
 
-	// Create token with refresh token
-	token := &oauth2.Token{
-		RefreshToken: requestBody.RefreshToken,
-	}
-
-	// Use token source to get new token
-	tokenSource := calendarConfig.Config.TokenSource(context.Background(), token)
-	newToken, err := tokenSource.Token()
+	// Get valid token (this will refresh if expired)
+	token, err := a.GoogleTokenSvc.GetValidToken(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to refresh token"})
+		if err.Error() == "no Google tokens found for user - re-login required" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no Google tokens found for user - re-login required"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to refresh token: %v", err)})
 		return
 	}
 
-	// Return new token
-	tokenJSON, _ := json.Marshal(newToken)
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Token refreshed successfully",
-		"token":   string(tokenJSON),
+		"message":    "Token refreshed successfully",
+		"user_id":    userID,
+		"expires_at": token.Expiry,
 	})
 }

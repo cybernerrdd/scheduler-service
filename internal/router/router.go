@@ -1,7 +1,12 @@
 package router
 
 import (
+	"os"
+
 	"github.com/gin-gonic/gin"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/calendar/v3"
 
 	"scheduler-service/internal/app"
 	"scheduler-service/internal/config"
@@ -12,6 +17,27 @@ import (
 
 func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
 	r := gin.Default()
+
+	// Initialize Google OAuth config if credentials are available
+	var googleTokenSvc *service.GoogleTokenService
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	redirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
+	
+	if clientID != "" && clientSecret != "" && redirectURL != "" {
+		oauthConfig := &oauth2.Config{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			RedirectURL:  redirectURL,
+			Scopes: []string{
+				calendar.CalendarScope,
+			},
+			Endpoint: google.Endpoint,
+		}
+		googleTokenRepo := postgres.NewGoogleTokenRepo()
+		googleTokenSvc = service.NewGoogleTokenService(appInstance.DB, googleTokenRepo, oauthConfig)
+		appInstance.GoogleTokenSvc = googleTokenSvc
+	}
 
 	// OAuth2 callback (must be before auth middleware)
 	r.GET("/oauth2callback", appInstance.GoogleOAuth2CallbackHandler)

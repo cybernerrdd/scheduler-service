@@ -90,3 +90,30 @@ func (a APIKey) MarshalJSON() ([]byte, error) {
 		Alias:         (*Alias)(&a),
 	})
 }
+
+type GoogleToken struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	AccessToken string    `json:"-"` // Never expose token in JSON
+	RefreshToken string   `json:"-"` // Never expose token in JSON
+	TokenType   string    `json:"token_type,omitempty"`
+	Expiry      time.Time `json:"expiry_utc"`
+	CreatedAt   time.Time `json:"created_at_utc,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at_utc,omitempty"`
+}
+
+// MarshalJSON ensures timestamps are serialized in UTC
+func (g GoogleToken) MarshalJSON() ([]byte, error) {
+	type Alias GoogleToken
+	return json.Marshal(&struct {
+		ExpiryUTC    time.Time `json:"expiry_utc"`
+		CreatedAtUTC time.Time `json:"created_at_utc,omitempty"`
+		UpdatedAtUTC time.Time `json:"updated_at_utc,omitempty"`
+		*Alias
+	}{
+		ExpiryUTC:    g.Expiry.UTC(),
+		CreatedAtUTC: g.CreatedAt.UTC(),
+		UpdatedAtUTC: g.UpdatedAt.UTC(),
+		Alias:        (*Alias)(&g),
+	})
+}

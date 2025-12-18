@@ -41,5 +41,11 @@ type APIKeyRepository interface {
 	UpdateLastUsed(ctx context.Context, q Querier, keyHash string) error
 }
 
+type GoogleTokenRepository interface {
+	GetTokenByUserID(ctx context.Context, q Querier, userID string) (*models.GoogleToken, error)
+	SaveToken(ctx context.Context, q Querier, token *models.GoogleToken) error
+	UpdateToken(ctx context.Context, q Querier, userID string, token *models.GoogleToken) error
+}
+
 // AppTime is a lightweight alias to avoid importing time here; implemented in impl files.
 type AppTime interface{}
