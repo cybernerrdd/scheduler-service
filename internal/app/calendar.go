@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -78,8 +79,24 @@ func (a *App) GoogleAuthHandler(c *gin.Context) {
 		return
 	}
 
-	// Generate state parameter for security
-	state := fmt.Sprintf("user_%s_%d", c.Query("user_id"), time.Now().Unix())
+	userID := c.Query("user_id")
+	redirectURI := c.Query("redirect_uri") // Optional redirect URI for after OAuth completes
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter required"})
+		return
+	}
+
+	// Generate state parameter with user_id, timestamp, and optionally redirect_uri
+	// Format: "user_<user_id>_<timestamp>_<base64_redirect_uri>" or "user_<user_id>_<timestamp>" if no redirect_uri
+	timestamp := time.Now().Unix()
+	state := fmt.Sprintf("user_%s_%d", userID, timestamp)
+	
+	if redirectURI != "" {
+		// Encode redirect_uri in base64 to avoid issues with special characters
+		encodedRedirectURI := base64.URLEncoding.EncodeToString([]byte(redirectURI))
+		state = fmt.Sprintf("user_%s_%d_%s", userID, timestamp, encodedRedirectURI)
+	}
 
 	url := calendarConfig.Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	c.JSON(http.StatusOK, gin.H{
@@ -109,14 +126,23 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Extract user_id from state parameter (format: "user_<user_id>_<timestamp>")
-	// Try to get from query param first (for backward compatibility), otherwise parse from state
-	userID := c.Query("user_id")
-	if userID == "" {
-		// Parse user_id from state: "user_<uuid>_<timestamp>"
-		parts := strings.Split(state, "_")
-		if len(parts) >= 2 && parts[0] == "user" {
-			userID = parts[1]
+	// Extract user_id and redirect_uri from state parameter
+	// Format: "user_<user_id>_<timestamp>_<base64_redirect_uri>" or "user_<user_id>_<timestamp>"
+	parts := strings.Split(state, "_")
+	if len(parts) < 3 || parts[0] != "user" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state parameter format"})
+		return
+	}
+
+	userID := parts[1]
+	var redirectURI string
+	
+	// Check if redirect_uri is encoded in state (4+ parts means redirect_uri is included)
+	if len(parts) >= 4 {
+		// Decode the redirect_uri from base64
+		decoded, err := base64.URLEncoding.DecodeString(parts[3])
+		if err == nil {
+			redirectURI = string(decoded)
 		}
 	}
 
@@ -144,6 +170,14 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 		return
 	}
 
+	// If redirect_uri is provided, redirect to it; otherwise return JSON response
+	if redirectURI != "" {
+		// Redirect to the provided URI
+		c.Redirect(http.StatusFound, redirectURI)
+		return
+	}
+
+	// Default: return JSON response (backward compatibility)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Authorization successful",
 		"state":   state,
