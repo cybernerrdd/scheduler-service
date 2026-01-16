@@ -18,6 +18,29 @@ import (
 func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
 	r := gin.Default()
 
+	r.GET("/health", func(c *gin.Context) {
+		if appInstance.DB != nil {
+			ctx := c.Request.Context()
+			if err := appInstance.DB.Ping(ctx); err != nil {
+				c.JSON(503, gin.H{
+					"status":  "unhealthy",
+					"database": "disconnected",
+					"error":   err.Error(),
+				})
+				return
+			}
+			c.JSON(200, gin.H{
+				"status":   "healthy",
+				"database": "connected",
+			})
+		} else {
+			c.JSON(503, gin.H{
+				"status":   "unhealthy",
+				"database": "not initialized",
+			})
+		}
+	})
+
 	// Initialize Google OAuth config if credentials are available
 	var googleTokenSvc *service.GoogleTokenService
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
