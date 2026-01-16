@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	DatabaseURL    string
+	Host           string
 	Port           string
 	StaticTokens   string
 	GoogleClientID string
@@ -20,6 +21,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		Host:           os.Getenv("HOST"),
 		Port:           os.Getenv("PORT"),
 		StaticTokens:   os.Getenv("STATIC_TOKENS"),
 		GoogleClientID: os.Getenv("GOOGLE_CLIENT_ID"),

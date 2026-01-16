@@ -20,6 +20,12 @@ func main() {
     if dbURL == "" {
         log.Fatal("DATABASE_URL required")
     }
+    if cfg.Host == "" {
+        log.Fatal("HOST required")
+    }
+    if cfg.Port == "" {
+        log.Fatal("PORT required")
+    }
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
@@ -30,5 +36,5 @@ func main() {
     appInstance := &app.App{DB: pool}
 
     r := router.Build(appInstance, cfg)
-    server.Run(r)
+    server.Run(r, cfg)
 }
