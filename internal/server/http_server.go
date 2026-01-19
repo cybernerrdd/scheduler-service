@@ -12,7 +12,7 @@ import (
 
 func Run(router *gin.Engine, cfg *config.Config) {
 	if cfg.Port == "" {
-		panic("PORT environment variable is required")
+		log.Fatal("PORT environment variable is required")
 	}
 
 	// Default HOST to 0.0.0.0 if not set (works for Railway and most deployments)
@@ -23,7 +23,9 @@ func Run(router *gin.Engine, cfg *config.Config) {
 
 	addr := fmt.Sprintf("%s:%s", host, cfg.Port)
 	log.Printf("Server listening on %s", addr)
+	log.Printf("Health check available at http://%s/health", addr)
+
 	if err := router.Run(addr); err != nil && err != http.ErrServerClosed {
-		panic(err)
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
