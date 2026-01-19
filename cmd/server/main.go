@@ -13,19 +13,16 @@ import (
 )
 
 func main() {
-    ctx := context.Background()
+	ctx := context.Background()
 
-    cfg, _ := config.Load()
-    dbURL := cfg.DatabaseURL
-    if dbURL == "" {
-        log.Fatal("DATABASE_URL required")
-    }
-    if cfg.Host == "" {
-        log.Fatal("HOST required")
-    }
-    if cfg.Port == "" {
-        log.Fatal("PORT required")
-    }
+	cfg, _ := config.Load()
+	dbURL := cfg.DatabaseURL
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL required")
+	}
+	if cfg.Port == "" {
+		log.Fatal("PORT required")
+	}
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
@@ -33,8 +30,8 @@ func main() {
 	}
 	defer pool.Close()
 
-    appInstance := &app.App{DB: pool}
+	appInstance := &app.App{DB: pool}
 
-    r := router.Build(appInstance, cfg)
-    server.Run(r, cfg)
+	r := router.Build(appInstance, cfg)
+	server.Run(r, cfg)
 }
