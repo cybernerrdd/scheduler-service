@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ func Run(router *gin.Engine, cfg *config.Config) {
 	}
 
 	addr := fmt.Sprintf("%s:%s", host, cfg.Port)
+	log.Printf("Server listening on %s", addr)
 	if err := router.Run(addr); err != nil && err != http.ErrServerClosed {
 		panic(err)
 	}
