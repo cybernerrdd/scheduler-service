@@ -16,16 +16,22 @@ import (
 )
 
 func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
+	// Set release mode for production
+	gin.SetMode(gin.ReleaseMode)
+
 	r := gin.Default()
+
+	// Trust Railway proxy (required for correct client IP and X-Forwarded-* headers)
+	r.SetTrustedProxies([]string{"0.0.0.0/0"})
 
 	r.GET("/health", func(c *gin.Context) {
 		if appInstance.DB != nil {
 			ctx := c.Request.Context()
 			if err := appInstance.DB.Ping(ctx); err != nil {
 				c.JSON(503, gin.H{
-					"status":  "unhealthy",
+					"status":   "unhealthy",
 					"database": "disconnected",
-					"error":   err.Error(),
+					"error":    err.Error(),
 				})
 				return
 			}
@@ -46,7 +52,7 @@ func Build(appInstance *app.App, cfg *config.Config) *gin.Engine {
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 	redirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
-	
+
 	if clientID != "" && clientSecret != "" && redirectURL != "" {
 		oauthConfig := &oauth2.Config{
 			ClientID:     clientID,
