@@ -91,14 +91,22 @@ func (a *App) GoogleAuthHandler(c *gin.Context) {
 	// Format: "user_<user_id>_<timestamp>_<base64_redirect_uri>" or "user_<user_id>_<timestamp>" if no redirect_uri
 	timestamp := time.Now().Unix()
 	state := fmt.Sprintf("user_%s_%d", userID, timestamp)
-	
+
 	if redirectURI != "" {
 		// Encode redirect_uri in base64 to avoid issues with special characters
 		encodedRedirectURI := base64.URLEncoding.EncodeToString([]byte(redirectURI))
 		state = fmt.Sprintf("user_%s_%d_%s", userID, timestamp, encodedRedirectURI)
 	}
 
-	url := calendarConfig.Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	// Generate OAuth URL with parameters to force account selection
+	// - oauth2.AccessTypeOffline: Request refresh token for offline access
+	// - oauth2.ApprovalForce: Force consent screen even if previously approved
+	// - prompt=select_account: Force Google account selection screen
+	url := calendarConfig.Config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.ApprovalForce,
+		oauth2.SetAuthURLParam("prompt", "select_account"),
+	)
 	c.JSON(http.StatusOK, gin.H{
 		"auth_url": url,
 		"state":    state,
@@ -136,7 +144,7 @@ func (a *App) GoogleOAuth2CallbackHandler(c *gin.Context) {
 
 	userID := parts[1]
 	var redirectURI string
-	
+
 	// Check if redirect_uri is encoded in state (4+ parts means redirect_uri is included)
 	if len(parts) >= 4 {
 		// Decode the redirect_uri from base64
@@ -394,7 +402,7 @@ func (a *App) GetGoogleCalendarEvents(c *gin.Context) {
 					SlotLengthMins: durMins,
 					Title:          event.Summary,
 					Available:      true,
-					IsRecurring:     false, // Google Calendar events are typically one-time
+					IsRecurring:    false, // Google Calendar events are typically one-time
 				}
 				fmt.Printf("Creating availability rule: %+v\n", rule)
 				availResult, availErr := availSvc.SetAvailability(c.Request.Context(), userID, []models.AvailabilityRule{rule})
@@ -637,7 +645,7 @@ Status: %s`,
 			{Email: interviewEvent.CandidateEmail, DisplayName: interviewEvent.CandidateName},
 			{Email: interviewEvent.InterviewerEmail},
 		},
-		Reminders: &calendar.EventReminders{  // ← Move this INSIDE the struct
+		Reminders: &calendar.EventReminders{ // ← Move this INSIDE the struct
 			UseDefault: true,
 		},
 	}
